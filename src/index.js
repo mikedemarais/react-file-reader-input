@@ -1,13 +1,25 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
+import React, { Component, createElement, PropTypes } from 'react';
+import { findDOMNode } from 'react-dom';
+import { omit } from 'lodash';
 
+const HIDDEN_INPUT_STYLE = {
+  // If user passes in children, display children and hide input.
+  position: 'absolute',
+  top: '-9999px',
+};
 
-export default class FileInput extends React.Component {
+export default class FileInput extends Component {
   static propTypes = {
-    as: React.PropTypes.oneOf(['binary', 'buffer', 'text', 'url']),
-    children: React.PropTypes.any,
-    onChange: React.PropTypes.func,
+    as: PropTypes.oneOf(['binary', 'buffer', 'text', 'url']),
+    children: PropTypes.any,
+    onChange: PropTypes.func,
+    wrapperRenderer: PropTypes.func,
   }
+
+  static defaultProps = {
+    wrapperRenderer: <div />,
+  };
+
   constructor(props) {
     // FileReader compatibility warning.
     super(props);
@@ -20,18 +32,19 @@ export default class FileInput extends React.Component {
       );
     }
   }
-  handleChange = e => {
+
+  handleChange = (event) => {
     const files = [];
-    for (let i = 0; i < e.target.files.length; i++) {
+    for (let i = 0; i < event.target.files.length; i++) {
       // Convert to Array.
-      files.push(e.target.files[i]);
+      files.push(event.target.files[i]);
     }
 
     // Build Promise List, each promise resolved by FileReader.onload.
     Promise.all(files.map(file => new Promise((resolve, reject) => {
       let reader = new FileReader();
 
-      reader.onload = result => {
+      reader.onload = (result) => {
         // Resolve both the FileReader result and its original file.
         resolve([result, file]);
       };
@@ -56,28 +69,28 @@ export default class FileInput extends React.Component {
         }
       }
     })))
-    .then(zippedResults => {
+    .then((zippedResults) => {
       // Run the callback after all files have been read.
-      this.props.onChange(e, zippedResults);
+      this.props.onChange(event, zippedResults);
     });
   }
-  triggerInput = e => {
-    ReactDOM.findDOMNode(this._reactFileReaderInput).click();
-  }
-  render() {
-    const hiddenInputStyle = this.props.children ? {
-      // If user passes in children, display children and hide input.
-      position: 'absolute',
-      top: '-9999px'
-    } : {};
 
-    return <div className="_react-file-reader-input"
-                onClick={this.triggerInput}>
-      <input {...this.props} children={undefined} type="file"
-             onChange={this.handleChange} ref={c => this._reactFileReaderInput = c}
-             style={hiddenInputStyle}/>
+  setInputRef = ref => (this._reactFileReaderInput = ref)
+  triggerInput = () => findDOMNode(this._reactFileReaderInput).click();
 
-      {this.props.children}
-    </div>
-  }
+  renderHiddenInput = () => (
+    <input
+      {...omit(this.props, [ 'children', 'wrapperRenderer'])}
+      onChange={this.handleChange}
+      ref={this.setInputRef}
+      style={this.props.children ? HIDDEN_INPUT_STYLE : {}}
+      type="file"
+    />
+  );
+
+  render = () =>
+    createElement(this.props.wrapperRenderer, {
+      children: [this.renderHiddenInput(), this.props.children],
+      onClick: this.triggerInput,
+    });
 }
